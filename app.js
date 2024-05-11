@@ -30,7 +30,7 @@ var userData;
 
 app.get('/', (req, res) => {
     if (!authed) {
-        res.send('<a href="/login">Login with Google</a><a href="https://github.com/login/oauth/authorize?client_id= '+ GITHUB_CLIENT_ID+'"> Login with Github</a>');
+        res.send('<a href="/login">Login with Google</a><a href="https://github.com/login/oauth/authorize?client_id='+ GITHUB_CLIENT_ID+'"> Login with Github</a>');
     } else {
         if(google_authed) {
             var oauth2 = google.oauth2({auth: oAuth2Client, version: 'v2'});
