@@ -28,7 +28,74 @@ var github_authed = false;
 
 var userData;
 
+const { Pool } = require("pg");
+const dotenv = require("dotenv");
+dotenv.config();
+
+const pool = new Pool({
+    user: process.env.PGUSER,
+    host: process.env.PGHOST,
+    database: process.env.PGDATABASE,
+    password: process.env.PGPASSWORD,
+    port: process.env.PGPORT,
+    ssl: true
+});
+ 
+const connectDb = async () => {
+    try {
+ 
+        await pool.connect()
+    } catch (error) {
+        console.log(error)
+    }
+}
+ 
+connectDb()
+
+const getUsers = (request, response) => {
+    console.log('Pobieram dane ...');
+    pool.query('SELECT * FROM public.Users', (error, res) => {
+        if (error) {
+            throw error
+        }
+        console.log('Dostałem ...');
+        for (let row of res.rows) {
+            console.log(JSON.stringify(row));
+        }
+    })
+};
+
+const handleLogin = (username) => {
+    const currentDate = new Date().toISOString();
+  
+    pool.query('SELECT * FROM public.Users WHERE name = $1', [username], (error, result) => {
+      if (error) {
+        throw error;
+      }
+  
+      if (result.rows.length === 0) {
+        // Użytkownik nie istnieje w bazie, więc dodajemy go
+        pool.query('INSERT INTO public.Users (name, joined, lastvisit, counter) VALUES ($1, $2, $3, $4)', [username, currentDate, currentDate, 1], (error, result) => {
+          if (error) {
+            throw error;
+          }
+          console.log('Dodano nowego użytkownika:', username);
+        });
+      } else {
+        // Użytkownik istnieje w bazie, aktualizujemy lastvisit i counter
+        const userId = result.rows[0].id;
+        pool.query('UPDATE public."Users" SET lastvisit = $1, counter = counter + 1 WHERE id = $2', [currentDate, userId], (error, result) => {
+          if (error) {
+            throw error;
+          }
+          console.log('Zaktualizowano dane użytkownika:', username);
+        });
+      }
+    });
+  };
+
 app.get('/', (req, res) => {
+    getUsers();
     if (!authed) {
         res.send('<a href="/login">Login with Google</a><a href="https://github.com/login/oauth/authorize?client_id='+ GITHUB_CLIENT_ID+'"> Login with Github</a>');
     } else {
@@ -80,8 +147,19 @@ app.get('/auth/google/callback', function (req, res) {
             } else {
                 console.log('Successfully authenticated');
                 oAuth2Client.setCredentials(tokens);
+                handleLogin
                 authed = true;
                 google_authed = true;
+                var oauth2 = google.oauth2({auth: oAuth2Client, version: 'v2'});
+                oauth2.userinfo.v2.me.get(function(err, result) {
+                    if(err) {
+                        console.log('Error:');
+                        console.log(err);
+                        res.send('Error occurred');
+                    } else {
+                        handleLogin(result.data.name)
+                    }
+                });
                 res.redirect('/')
             }
         });
@@ -117,11 +195,12 @@ app.get('/github/callback', (req, res) => {
       }
     }).then((response) => {
         userData = response.data;
+        handleLogin(userData.username)
         res.redirect('/');
     })
   });   
 
-  
+
 
 app.get('/logout', (req, res) => {
     authed = false;
